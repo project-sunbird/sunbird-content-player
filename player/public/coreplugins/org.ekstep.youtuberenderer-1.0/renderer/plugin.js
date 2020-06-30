@@ -220,6 +220,7 @@ org.ekstep.contentrenderer.baseLauncher.extend({
         }
     },
     contentPlaySummary: function () {
+        this.playerInfo = window.youtubePlayerInstance.playerInfo;
         var videoLength = this.playerInfo.duration
         var videoCurrentRefTime = this.playerInfo.mediaReferenceTime
         var currentVisitedLength = (Date.now() / 1000) - instance.startTime
