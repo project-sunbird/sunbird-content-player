@@ -4,14 +4,14 @@
  * @extends baseLauncher
  * @author Manoj Chandrashekar <manoj.chandrashekar@tarento.com>
  */
-
-org.ekstep.contentrenderer.baseLauncher.extend({
+ org.ekstep.contentrenderer.baseLauncher.extend({
     book: undefined,
     _start: undefined,
     currentPage: 1,
     totalPages: 0,
     lastPage: false,
     stageId:[],
+    pageCount:1,
     enableHeartBeatEvent: false,
     _constants: {
         mimeType: ["application/epub"],
@@ -34,6 +34,7 @@ org.ekstep.contentrenderer.baseLauncher.extend({
                 EkstepRendererAPI.dispatchEvent('renderer:content:end');
                 instance.removeProgressElements();
             } else {
+                instance.pageCount = (instance.pageCount >= instance.totalPages) ? instance.totalPages : instance.pageCount + 1;
                 instance.book.nextPage();
             }
         }, this);
@@ -48,8 +49,10 @@ org.ekstep.contentrenderer.baseLauncher.extend({
             if(instance.currentPage === 2) {
                 // This is needed because some ePubs do not go back to the cover page on `book.prevPage()`
                 instance.book.gotoPage(1);
+                instance.pageCount = 1;
                 instance.logTelemetryNavigate("2", "1");
             } else {
+                instance.pageCount =  (instance.pageCount <= 1) ? 1 : instance.pageCount - 1;
                 instance.book.prevPage();
             }
             instance.lastPage = false;
@@ -64,6 +67,7 @@ org.ekstep.contentrenderer.baseLauncher.extend({
     start: function (event, data) {
         this._super()
         var instance = this;
+        instance.pageCount = 1;
         data = content;
         var epubPath = undefined;
         var globalConfigObj = EkstepRendererAPI.getGlobalConfig();
@@ -117,7 +121,6 @@ org.ekstep.contentrenderer.baseLauncher.extend({
         this.addEventHandlers();
         this.initProgressElements();
     },
-
     // Get the total number of actual pages to render
     // remove page from pagination if in <spine> <itemref> property is linear=no
     getTotalPages: function () {
@@ -125,9 +128,10 @@ org.ekstep.contentrenderer.baseLauncher.extend({
         var data = instance.book.locations.spine
         var array = []
         try {
-             for (var index = 0; index < data.length; index++) {
+             for (var index = 0, newIndex =0 ; index < data.length; index++) {
                 if (_.has(data[index], 'linear') && (data[index].linear).toLowerCase() != "no") {
-                    array[index] = data[index]
+                    array[newIndex] = data[index]
+                    newIndex++
                 }
             }
             return array.length;
@@ -136,7 +140,6 @@ org.ekstep.contentrenderer.baseLauncher.extend({
             return data.length;
         } 
     },
-
     addEventHandlers: function () {
         var instance = this;
         instance.book.generatePagination().then(function (data) {
@@ -149,9 +152,9 @@ org.ekstep.contentrenderer.baseLauncher.extend({
         instance.book.on('book:pageChanged', function (data) {
             instance.logTelemetryInteract(instance.currentPage.toString());
             instance.logTelemetryNavigate(instance.currentPage.toString(), data.anchorPage.toString());
-            instance.currentPage = data.anchorPage;
+            instance.currentPage = instance.pageCount;//data.anchorPage;
             instance.updateProgressElements();
-            if (instance.book.pagination.lastPage === data.anchorPage  || instance.book.pagination.lastPage === data.pageRange[1] || instance.totalPages === data.anchorPage ) {
+            if (instance.totalPages === instance.pageCount ) {
                 instance.lastPage = true;
             }
         });
@@ -227,6 +230,7 @@ org.ekstep.contentrenderer.baseLauncher.extend({
     removeProgressElements: function () {
         jQuery('#page').remove();
         jQuery('#progress-container').remove();
+        instance.pageCount = 1;
     },
     updateProgressElements: function () {
         jQuery('#page').html(this.currentPage + ' of ' + this.totalPages);
@@ -240,8 +244,8 @@ org.ekstep.contentrenderer.baseLauncher.extend({
     },
     contentProgress:function(){
         var totalStages = this.totalPages;
-        var currentStageIndex = _.size(_.uniq(this.stageId)) || 1;
-        return this.progres(currentStageIndex + 1, totalStages);
+        var currentStageIndex = this.currentPage;
+        return this.progres(currentStageIndex, totalStages);
     },
     contentPlaySummary: function () {
         var playSummary =  [
@@ -249,13 +253,13 @@ org.ekstep.contentrenderer.baseLauncher.extend({
               "totallength":  parseInt(this.totalPages)
             },
             {
-              "visitedlength": parseInt(_.max(this.stageId))
+              "visitedlength": parseInt(this.currentPage)
             },
             {
-              "visitedcontentend": (this.totalPages == Math.max.apply(Math, this.stageId)) ? true : false
+              "visitedcontentend": (parseInt(this.totalPages) === parseInt(this.currentPage) ) ? true : false
             },
             {
-              "totalseekedlength": parseInt(this.totalPages) - _.size(_.uniq(this.stageId))
+              "totalseekedlength": 0
             }
         ]
         return playSummary;
